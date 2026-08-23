@@ -1,6 +1,10 @@
 """qFoldIT clean-room adapter boundary from UAG to Blender/UEFN assets."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from hashlib import sha256
+import json
 from typing import Any
 
 
@@ -31,7 +35,25 @@ def build_visual_projection(nodes: list[UAGNode]) -> list[dict[str, Any]]:
             "id": node.node_id,
             "type": node.object_type,
             "transform": list(node.transform),
-            "properties": dict(sorted(node.properties.items())),
+            "properties": {key: node.properties[key] for key in sorted(node.properties)},
         }
-        for node in nodes
+        for node in sorted(nodes, key=lambda item: item.node_id)
     ]
+
+
+def projection_hash(projection: list[dict[str, Any]]) -> str:
+    """Return a stable hash for deterministic asset/projection provenance."""
+    canonical = json.dumps(projection, sort_keys=True, separators=(",", ":"))
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_manifest(nodes: list[UAGNode], *, schema_version: str) -> dict[str, Any]:
+    """Build a provenance-aware visualization manifest from canonical UAG data."""
+    projection = build_visual_projection(nodes)
+    return {
+        "schema_version": schema_version,
+        "projection": projection,
+        "projection_hash": projection_hash(projection),
+        "authority": "qFoldIT_UAG",
+        "scientific_truth_mutable_here": False,
+    }
